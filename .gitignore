@@ -1,0 +1,37 @@
+# IntelliJ / Android Studio
+*.iml
+.idea/
+.kotlin/
+
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Configuración local
+local.properties
+
+# Archivos generados
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Salidas de compilación
+*.apk
+*.aab
+
+# Claves de firma
+*.jks
+*.keystore
+key.properties
+keystore.properties
+
+# Secretos y variables de entorno
+.env
+secrets.properties
+apikeys.properties
+google-services.json
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
