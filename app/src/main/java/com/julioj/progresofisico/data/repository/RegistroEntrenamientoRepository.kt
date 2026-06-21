@@ -34,4 +34,10 @@ class RegistroEntrenamientoRepository(
     ) {
         registroDao.eliminarRegistro(registro)
     }
+
+    suspend fun actualizarRegistro(
+        registro: RegistroEntrenamiento
+    ) {
+        registroDao.actualizarRegistro(registro)
+    }
 }

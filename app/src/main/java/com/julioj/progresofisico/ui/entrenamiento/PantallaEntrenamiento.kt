@@ -68,6 +68,10 @@ fun PantallaEntrenamiento(
     val repeticionesPorSerie = remember { mutableStateOf<List<String>>(emptyList()) }
     val mensajeError = remember { mutableStateOf("") }
     val registroPendienteEliminar = remember { mutableStateOf<RegistroEntrenamiento?>(null) }
+    val registroPendienteEditar = remember { mutableStateOf<RegistroEntrenamiento?>(null) }
+    val pesoEditado = remember { mutableStateOf("") }
+    val repeticionesEditadas = remember { mutableStateOf<List<String>>(emptyList()) }
+    val mensajeErrorEdicion = remember { mutableStateOf("") }
     val pestanaActiva = remember { mutableStateOf(PestanaEntrenamiento.REGISTRAR) }
     val textoBusqueda = remember { mutableStateOf("") }
     val grupoSeleccionado = remember { mutableStateOf("Todos") }
@@ -109,7 +113,10 @@ fun PantallaEntrenamiento(
 
                 NavigationBarItem(
                     selected = pestanaActiva.value == PestanaEntrenamiento.HISTORIAL,
-                    onClick = { pestanaActiva.value = PestanaEntrenamiento.HISTORIAL },
+                    onClick = {
+                        pestanaActiva.value = PestanaEntrenamiento.HISTORIAL
+                        entrenamientoViewModel.cargarHistorial()
+                    },
                     icon = {},
                     label = { Text(text = "Historial") },
                     colors = NavigationBarItemDefaults.colors(
@@ -273,6 +280,9 @@ fun PantallaEntrenamiento(
                                             entrenamientoViewModel.cargarUltimoRegistro(ejercicio.id)
                                             entrenamientoViewModel.cargarHistorialPorEjercicio(
                                                 ejercicio.id
+                                            )
+                                            entrenamientoViewModel.cargarRecomendacionUltimoRegistro(
+                                                ejercicio
                                             )
                                         },
                                         modifier = Modifier
@@ -474,19 +484,19 @@ fun PantallaEntrenamiento(
 
                                     val todasLasRepeticionesSonPositivas =
                                         repeticionesConvertidas.all { repeticion ->
-                                            repeticion > 0
+                                            repeticion >= 0
                                         }
 
-                                    val pesoEsPositivo =
-                                        pesoConvertido != null && pesoConvertido > 0
+                                    val pesoValido =
+                                        pesoConvertido != null && pesoConvertido >= 0
 
                                     when {
                                         ejercicioActual == null -> {
                                             mensajeError.value = "Selecciona un ejercicio."
                                         }
 
-                                        !pesoEsPositivo -> {
-                                            mensajeError.value = "Introduce un peso mayor que 0."
+                                        !pesoValido -> {
+                                            mensajeError.value = "Introduce un peso válido."
                                         }
 
                                         !todasLasSeriesSonValidas -> {
@@ -496,7 +506,7 @@ fun PantallaEntrenamiento(
 
                                         !todasLasRepeticionesSonPositivas -> {
                                             mensajeError.value =
-                                                "Las repeticiones deben ser mayores que 0."
+                                                "Las repeticiones no pueden ser negativas."
                                         }
 
                                         else -> {
@@ -588,7 +598,8 @@ fun PantallaEntrenamiento(
                             OutlinedTextField(
                                 value = filtroDia.value,
                                 onValueChange = { nuevoValor ->
-                                    filtroDia.value = nuevoValor.filter { caracter -> caracter.isDigit() }.take(2)
+                                    filtroDia.value =
+                                        nuevoValor.filter { caracter -> caracter.isDigit() }.take(2)
                                 },
                                 label = {
                                     Text(text = "Día")
@@ -600,7 +611,8 @@ fun PantallaEntrenamiento(
                             OutlinedTextField(
                                 value = filtroMes.value,
                                 onValueChange = { nuevoValor ->
-                                    filtroMes.value = nuevoValor.filter { caracter -> caracter.isDigit() }.take(2)
+                                    filtroMes.value =
+                                        nuevoValor.filter { caracter -> caracter.isDigit() }.take(2)
                                 },
                                 label = {
                                     Text(text = "Mes")
@@ -612,7 +624,8 @@ fun PantallaEntrenamiento(
                             OutlinedTextField(
                                 value = filtroAnio.value,
                                 onValueChange = { nuevoValor ->
-                                    filtroAnio.value = nuevoValor.filter { caracter -> caracter.isDigit() }.take(4)
+                                    filtroAnio.value =
+                                        nuevoValor.filter { caracter -> caracter.isDigit() }.take(4)
                                 },
                                 label = {
                                     Text(text = "Año")
@@ -642,14 +655,68 @@ fun PantallaEntrenamiento(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    if (ejercicioActual == null) {
+                    val historialBase =
+                        if (ejercicioActual == null) {
+                            entrenamientoViewModel.historialRegistros.value
+                        } else {
+                            entrenamientoViewModel.historialEjercicioSeleccionado.value
+                        }
+
+                    val historialFiltrado =
+                        historialBase.filter { registro ->
+
+                            val partesFecha = registro.fecha.split("/")
+
+                            val diaRegistro = partesFecha.getOrNull(0) ?: ""
+                            val mesRegistro = partesFecha.getOrNull(1) ?: ""
+                            val anioRegistro = partesFecha.getOrNull(2) ?: ""
+
+                            val coincideDia =
+                                filtroDia.value.isBlank() || diaRegistro == filtroDia.value.padStart(
+                                    2,
+                                    '0'
+                                )
+
+                            val coincideMes =
+                                filtroMes.value.isBlank() || mesRegistro == filtroMes.value.padStart(
+                                    2,
+                                    '0'
+                                )
+
+                            val coincideAnio =
+                                filtroAnio.value.isBlank() || anioRegistro == filtroAnio.value
+
+                            coincideDia && coincideMes && coincideAnio
+                        }
+
+                    if (historialFiltrado.isEmpty()) {
+                        Text(
+                            text = if (ejercicioActual == null) {
+                                "No hay entrenamientos registrados para esa fecha."
+                            } else {
+                                "No hay entrenamientos para esa fecha."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            color = Color(0xFF607D8B)
+                        )
+                    }
+
+                    historialFiltrado.take(10).forEach { registro ->
+
+                        val nombreEjercicioRegistro =
+                            entrenamientoViewModel.ejercicios.value
+                                .firstOrNull { ejercicio -> ejercicio.id == registro.idEjercicio }
+                                ?.nombre ?: "Ejercicio"
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Card(
-                                modifier = Modifier.fillMaxWidth(0.90f),
+                                modifier = Modifier
+                                    .fillMaxWidth(0.90f)
+                                    .padding(vertical = 8.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = Color.White
                                 ),
@@ -658,183 +725,275 @@ fun PantallaEntrenamiento(
                                 )
                             ) {
                                 Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                    modifier = Modifier.padding(16.dp)
                                 ) {
+                                    Text(
+                                        text = registro.fecha,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    if (ejercicioActual == null) {
+                                        Text(
+                                            text = "🏋️ $nombreEjercicioRegistro",
+                                            color = TurquesaPrincipal
+                                        )
+                                    }
 
                                     Text(
-                                        text = "🏋️",
-                                        style = MaterialTheme.typography.headlineMedium
+                                        text = "⚖️ ${registro.peso} kg",
+                                        color = Color(0xFF607D8B)
+                                    )
+
+                                    Text(
+                                        text = "🔁 ${registro.repeticionesPorSerie.joinToString(" · ")}",
+                                        color = Color(0xFF607D8B)
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    Text(
-                                        text = "Ningún ejercicio seleccionado",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        textAlign = TextAlign.Center
-                                    )
+                                    Button(
+                                        onClick = {
+                                            registroPendienteEditar.value = registro
+                                            pesoEditado.value = registro.peso.toString()
+                                            repeticionesEditadas.value =
+                                                registro.repeticionesPorSerie.map { repeticion ->
+                                                    repeticion.toString()
+                                                }
+                                            mensajeErrorEdicion.value = ""
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = TurquesaPrincipal
+                                        )
+                                    ) {
+                                        Text(text = "Editar")
+                                    }
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    Text(
-                                        text = "Selecciona un ejercicio en la pestaña Registrar para ver su historial.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color(0xFF607D8B),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-
-                    } else {
-
-                        if (entrenamientoViewModel.historialEjercicioSeleccionado.value.isEmpty()) {
-                            Text(
-                                text = "Todavía no has registrado entrenamientos para este ejercicio.",
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                color = Color(0xFF607D8B)
-                            )
-                        }
-
-                        if (registroPendienteEliminar.value != null) {
-                            AlertDialog(
-                                onDismissRequest = {
-                                    registroPendienteEliminar.value = null
-                                },
-                                title = {
-                                    Text(text = "Eliminar entrenamiento")
-                                },
-                                text = {
-                                    Text(
-                                        text = "¿Seguro que quieres eliminar el entrenamiento del día ${registroPendienteEliminar.value!!.fecha}?"
-                                    )
-                                },
-                                confirmButton = {
                                     Button(
                                         onClick = {
-                                            val registroEliminado = registroPendienteEliminar.value!!
-
-                                            progresoUsuarioViewModel.ganarExperiencia(
-                                                -registroEliminado.experienciaOtorgada
-                                            )
-
-                                            entrenamientoViewModel.eliminarRegistro(
-                                                registroEliminado
-                                            )
-
-                                            registroPendienteEliminar.value = null
+                                            registroPendienteEliminar.value = registro
                                         },
+                                        modifier = Modifier.fillMaxWidth(),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = Color(0xFFE57373)
                                         )
                                     ) {
                                         Text(text = "Eliminar")
                                     }
-                                },
-                                dismissButton = {
-                                    Button(
-                                        onClick = {
-                                            registroPendienteEliminar.value = null
-                                        },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFFB0BEC5),
-                                            contentColor = TextoOscuro
+                                }
+                            }
+                        }
+                    }
+
+                    if (registroPendienteEliminar.value != null) {
+                        AlertDialog(
+                            onDismissRequest = {
+                                registroPendienteEliminar.value = null
+                            },
+                            title = {
+                                Text(text = "Eliminar entrenamiento")
+                            },
+                            text = {
+                                Text(
+                                    text = "¿Seguro que quieres eliminar el entrenamiento del día ${registroPendienteEliminar.value!!.fecha}?"
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        val registroEliminado = registroPendienteEliminar.value!!
+
+                                        progresoUsuarioViewModel.ganarExperiencia(
+                                            -registroEliminado.experienciaOtorgada
                                         )
-                                    ) {
-                                        Text(text = "Cancelar")
+
+                                        entrenamientoViewModel.eliminarRegistro(
+                                            registroEliminado
+                                        )
+
+                                        registroPendienteEliminar.value = null
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFE57373)
+                                    )
+                                ) {
+                                    Text(text = "Eliminar")
+                                }
+                            },
+                            dismissButton = {
+                                Button(
+                                    onClick = {
+                                        registroPendienteEliminar.value = null
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFB0BEC5),
+                                        contentColor = TextoOscuro
+                                    )
+                                ) {
+                                    Text(text = "Cancelar")
+                                }
+                            }
+                        )
+                    }
+
+                    if (registroPendienteEditar.value != null) {
+                        AlertDialog(
+                            onDismissRequest = {
+                                registroPendienteEditar.value = null
+                                mensajeErrorEdicion.value = ""
+                            },
+                            title = {
+                                Text(text = "Editar entrenamiento")
+                            },
+                            text = {
+                                Column {
+                                    OutlinedTextField(
+                                        value = pesoEditado.value,
+                                        onValueChange = { nuevoValor ->
+                                            pesoEditado.value = nuevoValor
+                                        },
+                                        label = {
+                                            Text(text = "Peso usado")
+                                        },
+                                        singleLine = true
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    repeticionesEditadas.value.forEachIndexed { indice, valor ->
+                                        OutlinedTextField(
+                                            value = valor,
+                                            onValueChange = { nuevoValor ->
+                                                repeticionesEditadas.value =
+                                                    repeticionesEditadas.value.toMutableList()
+                                                        .also { lista ->
+                                                            lista[indice] = nuevoValor
+                                                        }
+                                            },
+                                            label = {
+                                                Text(text = "Serie ${indice + 1}")
+                                            },
+                                            singleLine = true
+                                        )
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+
+                                    if (mensajeErrorEdicion.value.isNotBlank()) {
+                                        Text(
+                                            text = mensajeErrorEdicion.value,
+                                            color = Color(0xFFF44336),
+                                            textAlign = TextAlign.Center
+                                        )
                                     }
                                 }
-                            )
-                        }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        val registroActual = registroPendienteEditar.value
+                                        val pesoConvertido = pesoEditado.value.toFloatOrNull()
 
-                        val historialFiltrado =
-                            entrenamientoViewModel.historialEjercicioSeleccionado.value.filter { registro ->
+                                        val repeticionesConvertidas =
+                                            repeticionesEditadas.value.mapNotNull { texto ->
+                                                texto.toIntOrNull()
+                                            }
 
-                                val partesFecha = registro.fecha.split("/")
+                                        val todasLasSeriesSonValidas =
+                                            repeticionesConvertidas.size == repeticionesEditadas.value.size
 
-                                val diaRegistro = partesFecha.getOrNull(0) ?: ""
-                                val mesRegistro = partesFecha.getOrNull(1) ?: ""
-                                val anioRegistro = partesFecha.getOrNull(2) ?: ""
+                                        val todasLasRepeticionesSonNoNegativas =
+                                            repeticionesConvertidas.all { repeticion ->
+                                                repeticion >= 0
+                                            }
 
-                                val coincideDia =
-                                    filtroDia.value.isBlank() || diaRegistro == filtroDia.value.padStart(2, '0')
+                                        val pesoEsValido =
+                                            pesoConvertido != null && pesoConvertido >= 0
 
-                                val coincideMes =
-                                    filtroMes.value.isBlank() || mesRegistro == filtroMes.value.padStart(2, '0')
+                                        when {
+                                            registroActual == null -> {
+                                                mensajeErrorEdicion.value =
+                                                    "No se ha encontrado el entrenamiento."
+                                            }
 
-                                val coincideAnio =
-                                    filtroAnio.value.isBlank() || anioRegistro == filtroAnio.value
+                                            !pesoEsValido -> {
+                                                mensajeErrorEdicion.value =
+                                                    "El peso no puede ser negativo."
+                                            }
 
-                                coincideDia && coincideMes && coincideAnio
-                            }
+                                            !todasLasSeriesSonValidas -> {
+                                                mensajeErrorEdicion.value =
+                                                    "Introduce repeticiones válidas en todas las series."
+                                            }
 
-                        if (historialFiltrado.isEmpty()) {
-                            Text(
-                                text = "No hay entrenamientos para esa fecha.",
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                color = Color(0xFF607D8B)
-                            )
-                        }
+                                            !todasLasRepeticionesSonNoNegativas -> {
+                                                mensajeErrorEdicion.value =
+                                                    "Las repeticiones no pueden ser negativas."
+                                            }
 
-                        historialFiltrado.take(10).forEach { registro ->
+                                            else -> {
+                                                val ejercicioDelRegistro =
+                                                    entrenamientoViewModel.ejercicios.value.firstOrNull { ejercicio ->
+                                                        ejercicio.id == registroActual.idEjercicio
+                                                    }
 
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth(0.90f)
-                                            .padding(vertical = 8.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = Color.White
-                                        ),
-                                        elevation = CardDefaults.cardElevation(
-                                            defaultElevation = 2.dp
-                                        )
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(16.dp)
-                                        ) {
-                                            Text(
-                                                text = registro.fecha,
-                                                style = MaterialTheme.typography.titleMedium
-                                            )
+                                                if (ejercicioDelRegistro == null) {
+                                                    mensajeErrorEdicion.value =
+                                                        "No se ha encontrado el ejercicio."
+                                                } else {
+                                                    val nuevaExperiencia =
+                                                        progresoUsuarioViewModel.calcularExperienciaPorEntrenamiento(
+                                                            peso = pesoConvertido,
+                                                            repeticionesPorSerie = repeticionesConvertidas,
+                                                            grupoMuscular = ejercicioDelRegistro.grupoMuscular
+                                                        )
 
-                                            Spacer(modifier = Modifier.height(6.dp))
+                                                    val diferenciaExperiencia =
+                                                        nuevaExperiencia - registroActual.experienciaOtorgada
 
-                                            Text(
-                                                text = "⚖️ ${registro.peso} kg",
-                                                color = Color(0xFF607D8B)
-                                            )
+                                                    val registroActualizado = registroActual.copy(
+                                                        peso = pesoConvertido,
+                                                        repeticionesPorSerie = repeticionesConvertidas,
+                                                        experienciaOtorgada = nuevaExperiencia
+                                                    )
 
-                                            Text(
-                                                text = "🔁 ${registro.repeticionesPorSerie.joinToString(" · ")}",
-                                                color = Color(0xFF607D8B)
-                                            )
+                                                    entrenamientoViewModel.actualizarRegistro(
+                                                        registroActualizado
+                                                    )
 
-                                            Spacer(modifier = Modifier.height(12.dp))
+                                                    progresoUsuarioViewModel.ganarExperiencia(
+                                                        diferenciaExperiencia
+                                                    )
 
-                                            Button(
-                                                onClick = {
-                                                    registroPendienteEliminar.value = registro
-                                                },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = Color(0xFFE57373)
-                                                )
-                                            ) {
-                                                Text(text = "Eliminar")
+                                                    registroPendienteEditar.value = null
+                                                    mensajeErrorEdicion.value = ""
+                                                }
                                             }
                                         }
                                     }
+                                ) {
+                                    Text(text = "Guardar")
+                                }
+                            },
+                            dismissButton = {
+                                Button(
+                                    onClick = {
+                                        registroPendienteEditar.value = null
+                                        mensajeErrorEdicion.value = ""
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFB0BEC5),
+                                        contentColor = TextoOscuro
+                                    )
+                                ) {
+                                    Text(text = "Cancelar")
                                 }
                             }
+                        )
                     }
                 }
             }

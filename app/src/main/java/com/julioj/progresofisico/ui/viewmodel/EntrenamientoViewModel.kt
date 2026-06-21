@@ -47,7 +47,10 @@ class EntrenamientoViewModel(
             )
 
             registroRepository.insertarRegistro(registro)
+
             cargarHistorial()
+            cargarHistorialPorEjercicio(ejercicio.id)
+            cargarUltimoRegistro(ejercicio.id)
 
             val indicador = CalculadorProgreso.calcularIndicador(
                 ejercicio = ejercicio,
@@ -64,13 +67,25 @@ class EntrenamientoViewModel(
         viewModelScope.launch {
             registroRepository.eliminarRegistro(registro)
 
-            mensajeResultado.value = "Entrenamiento eliminado correctamente."
-
             cargarHistorial()
 
             cargarHistorialPorEjercicio(registro.idEjercicio)
 
             cargarUltimoRegistro(registro.idEjercicio)
+        }
+    }
+
+    fun actualizarRegistro(
+        registroActualizado: RegistroEntrenamiento
+    ) {
+        viewModelScope.launch {
+            registroRepository.actualizarRegistro(registroActualizado)
+
+            cargarHistorial()
+
+            cargarHistorialPorEjercicio(registroActualizado.idEjercicio)
+
+            cargarUltimoRegistro(registroActualizado.idEjercicio)
         }
     }
 
@@ -97,6 +112,28 @@ class EntrenamientoViewModel(
             historialEjercicioSeleccionado.value = registroRepository.obtenerRegistrosPorEjercicio(
                 idEjercicio
             )
+        }
+    }
+
+    fun cargarRecomendacionUltimoRegistro(
+        ejercicio: Ejercicio
+    ) {
+        viewModelScope.launch {
+            val ultimoRegistroEjercicio =
+                registroRepository.obtenerUltimoRegistroPorEjercicio(ejercicio.id)
+
+            ultimoRegistro.value = ultimoRegistroEjercicio
+
+            if (ultimoRegistroEjercicio != null) {
+                val indicador = CalculadorProgreso.calcularIndicador(
+                    ejercicio = ejercicio,
+                    registro = ultimoRegistroEjercicio
+                )
+
+                mensajeResultado.value = FormateadorIndicador.obtenerMensaje(indicador)
+            } else {
+                mensajeResultado.value = ""
+            }
         }
     }
 
